@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flash Flood Prediction - BMKG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #10b981; }
+        .status-offline { background-color: #ef4444; }
+        .status-checking { background-color: #f59e0b; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .tab-button { transition: all 0.3s; }
+        .tab-button.active {
+            background: linear-gradient(to right, #3b82f6, #06b6d4);
+            color: white;
+        }
+        
+        /* Watermark */
+        body::before {
+            content: 'KELOMPOK 4';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 8rem;
+            font-weight: 900;
+            color: rgba(0, 0, 0, 0.03);
+            z-index: 0;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        /* Ensure content is above watermark */
+        .max-w-7xl {
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-cyan-50 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-6 relative overflow-hidden">
+            <!-- Watermark -->
+            <div class="absolute top-4 right-4 opacity-10 text-8xl font-black text-gray-400 rotate-[-15deg] pointer-events-none">
+                K4
+            </div>
+            
+            <div class="flex items-center justify-between mb-4 relative z-10">
+                <div>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-2">🌊 Flash Flood Prediction</h1>
+                    <p class="text-gray-600 text-lg">AOL Artificial Intelligence - 3rd Semester</p>
+                    <p class="text-sm text-gray-500 font-semibold mt-1">Kelompok 4</p>
+                    <div class="mt-2 inline-block bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-lg px-4 py-2">
+                        <p class="text-sm font-bold text-purple-800">
+                            ⭐ NEW PARAMETERS ADDED (Professor's Suggestion):
+                        </p>
+                        <p class="text-xs text-purple-700 mt-1">
+                            📐 Area Size (km²) • 👥 Population Density (people/km²)
+                        </p>
+                        <p class="text-xs text-purple-600 mt-1">
+                            Now includes flood severity assessment & estimated people affected!
+                        </p>
+                    </div>
+                </div>
+                <div class="text-right relative z-10">
+                    <div class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-bold">
+                        🇮🇩 BMKG
+                    </div>
+                    <div class="mt-2 bg-purple-500 text-white px-3 py-1 rounded text-xs font-bold">
+                        14 Parameters
+                    </div>
+                    <div class="mt-2 bg-gray-700 text-white px-3 py-1 rounded text-xs font-bold">
+                        Kelompok 4
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div id="serverStatus" class="flex items-center">
+                    <span class="status-dot status-checking"></span>
+                    <span class="text-sm text-gray-500">Checking server...</span>
+                </div>
+                <button onclick="checkServer()" class="text-sm text-blue-600 hover:text-blue-700 underline">
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Warning -->
+        <div id="serverWarning" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r-lg hidden">
+            <p class="text-sm text-yellow-700 font-medium">⚠️ Backend not running! Run: <code class="bg-yellow-100 px-2 py-0.5 rounded">python app.py</code></p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="bg-white rounded-2xl shadow-xl p-2 mb-6 flex space-x-2">
+            <button onclick="switchTab('bmkg')" id="tab-bmkg" class="tab-button active flex-1 px-6 py-3 rounded-xl font-bold text-sm">
+                🌤️ BMKG Real-Time
+            </button>
+            <button onclick="switchTab('manual')" id="tab-manual" class="tab-button flex-1 px-6 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200">
+                ⚙️ Manual Input
+            </button>
+        </div>
+
+        <!-- BMKG Tab -->
+        <div id="content-bmkg" class="grid md:grid-cols-2 gap-6">
+            <!-- BMKG Input -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">🌍 Select City</h2>
+                
+                <div class="space-y-4">
+                    <div class="border-2 border-blue-300 rounded-lg p-4 bg-blue-50">
+                        <label class="text-sm font-semibold text-gray-700 mb-3 block">📍 Enter City Name:</label>
+                        <input type="text" id="cityInput" value="Cikarang" placeholder="e.g., Jakarta, Bandung, Surabaya"
+                            class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg font-medium">
+                    </div>
+
+                    <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                        <h3 class="font-bold text-green-800 mb-3 text-sm">🏙️ Quick Select Cities:</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectCity('Jakarta')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Jakarta
+                            </button>
+                            <button onclick="selectCity('Bandung')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Bandung
+                            </button>
+                            <button onclick="selectCity('Surabaya')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Surabaya
+                            </button>
+                            <button onclick="selectCity('Bekasi')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Bekasi
+                            </button>
+                            <button onclick="selectCity('Yogyakarta')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Yogyakarta
+                            </button>
+                            <button onclick="selectCity('Semarang')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Semarang
+                            </button>
+                            <button onclick="selectCity('Malang')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Malang
+                            </button>
+                            <button onclick="selectCity('Bogor')" class="bg-white hover:bg-green-100 border border-green-300 rounded-lg px-3 py-2 text-sm font-medium text-green-800 transition">
+                                Bogor
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="bmkgWeatherDisplay" class="hidden bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200">
+                        <h3 class="font-bold text-blue-800 mb-3 text-sm">🌤️ Current Weather:</h3>
+                        <div id="weatherInfo" class="space-y-2 text-sm text-blue-900"></div>
+                    </div>
+
+                    <button onclick="predictFromBMKG()" id="bmkgPredictBtn"
+                        class="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-4 rounded-xl font-bold text-xl hover:from-green-600 hover:to-emerald-600 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                        🚀 Get Weather & Predict Flood Risk
+                    </button>
+
+                    <div id="bmkgError" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+                </div>
+            </div>
+
+            <!-- BMKG Results -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">📊 Prediction Results</h2>
+                
+                <div id="bmkgPlaceholder" class="flex flex-col items-center justify-center h-[500px] text-center">
+                    <svg class="w-20 h-20 text-gray-300 mb-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M5.5 16a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 16h-8z"/>
+                    </svg>
+                    <p class="text-gray-500 text-lg">
+                        Select a city and click<br>
+                        <span class="font-bold">"Get Weather & Predict"</span>
+                    </p>
+                </div>
+
+                <div id="bmkgResults" class="hidden space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- Manual Tab -->
+        <div id="content-manual" class="hidden grid md:grid-cols-2 gap-6">
+            <!-- Manual Form -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">⚙️ Manual Parameters</h2>
+                
+                <form id="manualForm" class="space-y-3 max-h-[650px] overflow-y-auto pr-2">
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">⛰️ Soil Height (m)</label>
+                        <input type="number" step="0.1" name="soil_height" placeholder="50" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">💧 Rainfall Intensity (mm/h)</label>
+                        <input type="number" step="0.1" name="rainfall_intensity" placeholder="30" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">☔️ Rainfall Duration (hours)</label>
+                        <input type="number" step="0.1" name="rainfall_duration" placeholder="6" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">📈 River Water Level (m)</label>
+                        <input type="number" step="0.1" name="river_water_level" placeholder="3" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">🚰 Drainage Capability (%)</label>
+                        <input type="number" step="0.1" name="drainage_capability" placeholder="60" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">🏙️ Urbanization Index (%)</label>
+                        <input type="number" step="0.1" name="urbanization_index" placeholder="70" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">🌳 Deforestation Index (%)</label>
+                        <input type="number" step="0.1" name="deforestation_index" placeholder="45" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">🌊 Sea Level Rise (m)</label>
+                        <input type="number" step="0.1" name="sea_level_rise" placeholder="0.3" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">💦 Soil Moisture (%)</label>
+                        <input type="number" step="0.1" name="soil_moisture" placeholder="70" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">⛰️ Terrain Slope (°)</label>
+                        <input type="number" step="0.1" name="terrain_slope" placeholder="15" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">📏 Distance to River (km)</label>
+                        <input type="number" step="0.1" name="distance_to_river" placeholder="1.5" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="border border-gray-200 rounded-lg p-3">
+                        <label class="text-sm font-semibold text-gray-700 mb-2 block">📅 Previous 24h Rainfall (mm)</label>
+                        <input type="number" step="0.1" name="previous_24h_rainfall" placeholder="80" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <!-- NEW PARAMETERS -->
+                    <div class="bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-400 rounded-lg p-4 mb-3">
+                        <div class="flex items-center mb-2">
+                            <span class="bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full">NEW PARAMETER</span>
+                            <span class="ml-2 text-sm font-bold text-purple-800">Suggested by Professor</span>
+                        </div>
+                        <label class="text-sm font-semibold text-purple-800 mb-2 block">🗺️ Area Size (km²)</label>
+                        <input type="number" step="0.1" name="area_size" placeholder="50" required
+                            class="w-full px-3 py-2 border-2 border-purple-400 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white">
+                        <p class="text-xs text-purple-700 mt-2 font-medium">
+                            💡 Examples: District (10-100) • City (100-500) • Province (500+)
+                        </p>
+                    </div>
+
+                    <div class="bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-400 rounded-lg p-4">
+                        <div class="flex items-center mb-2">
+                            <span class="bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full">NEW PARAMETER</span>
+                            <span class="ml-2 text-sm font-bold text-purple-800">Suggested by Professor</span>
+                        </div>
+                        <label class="text-sm font-semibold text-purple-800 mb-2 block">👥 Population Density (people/km²)</label>
+                        <input type="number" step="1" name="population_density" placeholder="5000" required
+                            class="w-full px-3 py-2 border-2 border-purple-400 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white">
+                        <p class="text-xs text-purple-700 mt-2 font-medium">
+                            💡 Examples: Rural (100-1000) • Urban (5000-10000) • Dense (15000+)
+                        </p>
+                    </div>
+
+                    <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-3 mt-3">
+                        <p class="text-xs font-bold text-green-800 mb-1">✨ Why These Parameters Matter:</p>
+                        <ul class="text-xs text-green-700 space-y-1">
+                            <li>• <strong>Area Size:</strong> Larger areas = more cumulative flood risk</li>
+                            <li>• <strong>Population Density:</strong> More people = higher impact & worse drainage</li>
+                            <li>• <strong>Result:</strong> Model now estimates people affected & severity level!</li>
+                        </ul>
+                    </div>
+
+                    <div id="manualError" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+
+                    <button type="submit" id="manualPredictBtn"
+                        class="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-4 rounded-xl font-bold text-xl hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg">
+                        🔬 Run Prediction
+                    </button>
+                </form>
+            </div>
+
+            <!-- Manual Results -->
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Prediction Results</h2>
+                
+                <div id="manualPlaceholder" class="flex flex-col items-center justify-center h-[500px] text-center">
+                    <svg class="w-20 h-20 text-gray-300 mb-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clip-rule="evenodd"/>
+                    </svg>
+                    <p class="text-gray-500 text-lg">Enter parameters</p>
+                </div>
+
+                <div id="manualResults" class="hidden space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-6 text-center">
+            <div class="bg-white rounded-xl shadow-lg p-6 max-w-4xl mx-auto">
+                <h3 class="text-lg font-bold text-gray-800 mb-3">📚 Model Information</h3>
+                <div class="grid md:grid-cols-2 gap-4 text-sm text-left">
+                    <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <h4 class="font-bold text-blue-800 mb-2">🔧 Technical Specs</h4>
+                        <ul class="text-blue-700 space-y-1 text-xs">
+                            <li>• <strong>Model:</strong> Random Forest Classifier</li>
+                            <li>• <strong>Parameters:</strong> 14 (12 original + 2 new)</li>
+                            <li>• <strong>Training Data:</strong> 8,000 samples</li>
+                            <li>• <strong>Trees:</strong> 250</li>
+                            <li>• <strong>Data Source:</strong> BMKG Real-Time API</li>
+                        </ul>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                        <h4 class="font-bold text-purple-800 mb-2">⭐ New Parameters (Professor's Suggestion)</h4>
+                        <ul class="text-purple-700 space-y-1 text-xs">
+                            <li>• <strong>📐 Area Size (km²):</strong> Geographic coverage</li>
+                            <li>• <strong>👥 Population Density:</strong> People per km²</li>
+                            <li>• <strong>🎯 Purpose:</strong> Estimate flood severity</li>
+                            <li>• <strong>📊 Output:</strong> People affected calculation</li>
+                            <li>• <strong>💡 Benefit:</strong> Emergency response planning</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="mt-4 bg-green-50 rounded-lg p-3 border border-green-200">
+                    <p class="text-xs text-green-800">
+                        <strong>🌊 Data:</strong> BMKG (Badan Meteorologi, Klimatologi, dan Geofisika) Indonesia<br>
+                        <strong>🎓 Project:</strong> AOL Artificial Intelligence - 3rd Semester<br>
+                        <strong>👥 Team:</strong> Kelompok 4<br>
+                        <strong>✨ Enhancement:</strong> Added area-based severity assessment per professor's recommendation
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+        let serverOnline = false;
+
+        window.addEventListener('load', function() {
+            checkServer();
+        });
+
+        function selectCity(cityName) {
+            document.getElementById('cityInput').value = cityName;
+        }
+
+        function switchTab(tab) {
+            document.getElementById('tab-bmkg').classList.toggle('active', tab === 'bmkg');
+            document.getElementById('tab-manual').classList.toggle('active', tab === 'manual');
+            document.getElementById('tab-bmkg').classList.toggle('bg-gray-100', tab !== 'bmkg');
+            document.getElementById('tab-bmkg').classList.toggle('text-gray-700', tab !== 'bmkg');
+            document.getElementById('tab-manual').classList.toggle('bg-gray-100', tab !== 'manual');
+            document.getElementById('tab-manual').classList.toggle('text-gray-700', tab !== 'manual');
+            
+            document.getElementById('content-bmkg').classList.toggle('hidden', tab !== 'bmkg');
+            document.getElementById('content-manual').classList.toggle('hidden', tab !== 'manual');
+        }
+
+        async function checkServer() {
+            const statusDiv = document.getElementById('serverStatus');
+            const warningDiv = document.getElementById('serverWarning');
+            
+            statusDiv.innerHTML = '<span class="status-dot status-checking"></span><span class="text-sm text-gray-500">Checking...</span>';
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch(API_URL + '/health', { 
+                    signal: controller.signal,
+                    method: 'GET'
+                });
+                clearTimeout(timeoutId);
+                
+                const data = await response.json();
+                
+                if (data.status === 'running') {
+                    serverOnline = true;
+                    statusDiv.innerHTML = '<span class="status-dot status-online"></span><span class="text-sm text-green-600 font-medium">✓ Server Online</span>';
+                    warningDiv.classList.add('hidden');
+                } else {
+                    throw new Error('Not ready');
+                }
+            } catch (error) {
+                serverOnline = false;
+                statusDiv.innerHTML = '<span class="status-dot status-offline"></span><span class="text-sm text-red-600 font-medium">✗ Server Offline</span>';
+                warningDiv.classList.remove('hidden');
+                console.error('Server check failed:', error);
+            }
+        }
+
+        async function predictFromBMKG() {
+            if (!serverOnline) {
+                alert('⚠️ Server not running! Please run: python app.py');
+                return;
+            }
+
+            const btn = document.getElementById('bmkgPredictBtn');
+            const errorDiv = document.getElementById('bmkgError');
+            const cityName = document.getElementById('cityInput').value.trim();
+
+            if (!cityName) {
+                errorDiv.textContent = 'Please enter a city name';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Fetching BMKG Data...';
+            errorDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch(API_URL + '/predict-from-bmkg', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({city_name: cityName})
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Prediction failed');
+                }
+
+                // Show weather info
+                document.getElementById('bmkgWeatherDisplay').classList.remove('hidden');
+                document.getElementById('weatherInfo').innerHTML = `
+                    <div><strong>📍 Location:</strong> ${result.location}</div>
+                    <div><strong>🗺️ Area Type:</strong> ${result.area_info.area_type}</div>
+                    <div><strong>📐 Area Size:</strong> ${result.area_info.area_size_km2} km²</div>
+                    <div><strong>👥 Population:</strong> ${result.area_info.total_population.toLocaleString()} people</div>
+                    <hr class="my-2 border-blue-300">
+                    <div><strong>🌡️ Temperature:</strong> ${result.bmkg_data.temperature}°C</div>
+                    <div><strong>💧 Humidity:</strong> ${result.bmkg_data.humidity}%</div>
+                    <div><strong>🌤️ Weather:</strong> ${result.bmkg_data.weather}</div>
+                    <hr class="my-2 border-blue-300">
+                    <div class="text-xs">
+                        <div><strong>Est. Rainfall:</strong> ${result.estimated_parameters.rainfall_intensity} mm/h</div>
+                        <div><strong>Soil Moisture:</strong> ${result.estimated_parameters.soil_moisture}%</div>
+                    </div>
+                `;
+
+                displayResults(result, 'bmkg');
+            } catch (error) {
+                console.error('Error:', error);
+                errorDiv.textContent = error.message || 'Failed to get prediction';
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Get Weather & Predict Flood Risk';
+            }
+        }
+
+        function displayResults(result, type) {
+            const placeholder = document.getElementById(type + 'Placeholder');
+            const container = document.getElementById(type + 'Results');
+            
+            placeholder.classList.add('hidden');
+            container.classList.remove('hidden');
+
+            const prob = result.probability;
+            let level, color, bg;
+            
+            if (prob > 0.7) {
+                level = 'HIGH'; color = 'bg-red-500'; bg = 'bg-red-50';
+            } else if (prob > 0.4) {
+                level = 'MODERATE'; color = 'bg-yellow-500'; bg = 'bg-yellow-50';
+            } else {
+                level = 'LOW'; color = 'bg-green-500'; bg = 'bg-green-50';
+            }
+
+            const recs = prob > 0.7 
+                ? ['Alert emergency services', 'Prepare evacuation', 'Move to higher ground']
+                : prob > 0.4
+                ? ['Monitor weather updates', 'Prepare emergency supplies', 'Avoid low-lying areas']
+                : ['Continue routine monitoring', 'Stay informed'];
+
+            // Severity info (if available from BMKG prediction)
+            let severityHTML = '';
+            if (result.severity_assessment) {
+                const sev = result.severity_assessment;
+                const sevColor = sev.severity_level === 'Critical' ? 'red' : 
+                                sev.severity_level === 'High' ? 'orange' : 
+                                sev.severity_level === 'Moderate' ? 'yellow' : 'green';
+                
+                severityHTML = `
+                    <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-4">
+                        <div class="flex items-center mb-2">
+                            <span class="bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-full">NEW FEATURE</span>
+                            <h4 class="font-bold text-purple-800 ml-2 text-sm">⚠️ Flood Severity Assessment</h4>
+                        </div>
+                        <p class="text-xs text-purple-600 mb-3 italic">Based on professor's suggested parameters: Area Size & Population Density</p>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between bg-white rounded-lg p-2 border border-purple-200">
+                                <span class="text-gray-700">Severity Level:</span>
+                                <strong class="text-${sevColor}-700 text-lg">${sev.severity_level.toUpperCase()}</strong>
+                            </div>
+                            <div class="flex justify-between bg-white rounded-lg p-2 border border-purple-200">
+                                <span class="text-gray-700">Est. Flood Coverage:</span>
+                                <strong>${sev.estimated_flood_coverage_km2} km² (${sev.estimated_flood_coverage_pct || 0}%)</strong>
+                            </div>
+                            <div class="flex justify-between bg-white rounded-lg p-2 border border-purple-200">
+                                <span class="text-gray-700">Est. People Affected:</span>
+                                <strong class="text-xl text-red-700">${sev.estimated_people_affected.toLocaleString()}</strong>
+                            </div>
+                        </div>
+                        <div class="mt-3 bg-white rounded-lg p-2 border border-purple-200">
+                            <p class="text-xs text-gray-600">
+                                <strong>📊 Calculation:</strong> Flood Coverage Area × Population Density<br>
+                                <strong>🎯 Purpose:</strong> Estimate emergency response needs & resource allocation
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = `
+                <div class="${bg} border-2 ${color} border-opacity-30 rounded-xl p-6">
+                    <div class="text-center">
+                        <div class="${color} text-white rounded-full text-xs font-bold mb-3 inline-block px-4 py-2">
+                            ${level} RISK
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2">
+                            ${result.flash_flood === 1 ? '⚠️ FLOOD WARNING' : '✓ No Immediate Risk'}
+                        </h3>
+                        <div class="text-5xl font-bold text-gray-800 mt-4">
+                            ${(prob * 100).toFixed(1)}%
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">Flood Probability</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>Low</span>
+                        <span>Moderate</span>
+                        <span>High</span>
+                    </div>
+                    <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="${color} h-full transition-all duration-500" style="width: ${prob * 100}%"></div>
+                    </div>
+                </div>
+
+                ${severityHTML}
+
+                <div class="bg-gray-50 rounded-xl p-4">
+                    <h4 class="font-bold text-gray-800 mb-2 text-sm">📋 Recommendations</h4>
+                    <ul class="space-y-1 text-sm">
+                        ${recs.map(r => `<li class="flex items-start"><span class="text-blue-500 mr-2">•</span>${r}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <div class="bg-blue-50 rounded-xl p-4">
+                    <h4 class="font-bold text-gray-800 mb-2 text-sm">📊 Model Details</h4>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div><span class="text-gray-600">Model:</span> <strong class="block">${result.model_type}</strong></div>
+                        <div><span class="text-gray-600">Accuracy:</span> <strong class="block">${(result.model_accuracy * 100).toFixed(1)}%</strong></div>
+                        <div><span class="text-gray-600">Source:</span> <strong class="block">${result.data_source || 'Manual'}</strong></div>
+                        <div><span class="text-gray-600">Confidence:</span> <strong class="block">${(Math.max(prob, 1 - prob) * 100).toFixed(1)}%</strong></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Manual form
+        document.getElementById('manualForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!serverOnline) {
+                alert('⚠️ Server not running!');
+                return;
+            }
+
+            const btn = document.getElementById('manualPredictBtn');
+            const errorDiv = document.getElementById('manualError');
+            
+            const formData = new FormData(e.target);
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = parseFloat(value);
+            });
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Processing...';
+            errorDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch(API_URL + '/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Prediction failed');
+                }
+
+                displayResults(result, 'manual');
+            } catch (error) {
+                console.error('Error:', error);
+                errorDiv.textContent = error.message || 'Failed to get prediction';
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔬 Run Prediction';
+            }
+        });
+    </script>
+</body>
+</html>
